@@ -327,14 +327,21 @@ This is correct because RISC-V instructions are 4 bytes wide and a single-cycle 
 
 ## Results Summary
 
+## Results Summary
+
 | Metric | Value |
 |---|---|
-| Target clock frequency | 50 MHz (20 ns period) |
-| Worst negative slack | +0.397 ns (MET) |
-| Total cell area | 304 units (post-`syn_opt`) |
-| GLS result | `pc_out` increments correctly by 4 per cycle after reset |
-| Instructions supported | All RV32I base integer instructions (R/I/S/B/U/J types) |
-
+| Clock Period | 20 ns (50 MHz) |
+| Worst Slack | +16.057 ns (MET) |
+| Critical Path Delay | 3.8 ns |
+| Total Standard Cells | 88 |
+| Total Cell Area | 283.860 units |
+| Sequential Cells (FF) | 30 (65.3% of area) |
+| Logic Cells | 57 (34.5% of area) |
+| Leakage Power | 5.440 nW |
+| Dynamic Power | 9368.974 nW |
+| Total Power | 9374.414 nW (~9.37 µW) |
+| GLS Result | Pending |
 ---
 
 ## Known Limitations
