@@ -1,0 +1,20 @@
+# Proprietary library files - never upload these
+*.lib
+*.db
+*.v.gz
+
+# Synthesis temp files
+genus.cmd
+genus.log
+fv/
+*.enc
+
+# Simulation temp files
+*.log
+*.jou
+*.shm/
+*.vcd
+
+# OS junk
+.DS_Store
+Thumbs.db
