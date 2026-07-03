@@ -1,8 +1,8 @@
-# RISC-V Single Cycle Processor — Synthesis & GLS Flow
+# RISC-V Single-Cycle Processor — Synthesis & GLS Flow
 
-This repository documents the complete process of taking a single-cycle RISC-V processor from RTL (Verilog source code) all the way through **logic synthesis** and **gate-level simulation (GLS)**, using industry-standard EDA tools (Cadence Genus and ncverilog) on a 45nm standard cell technology.
+This repository documents the complete process of taking a single-cycle RISC-V RV32I processor from RTL (Verilog source code) all the way through **logic synthesis** and **gate-level simulation (GLS)**, using industry-standard EDA tools (Cadence Genus 18.1 and ncverilog) on a 45nm standard cell technology.
 
-This was done as part of an academic VLSI/digital design internship. The same flow was first validated on a simpler mod-10 counter design before being applied here to a full RISC-V core, so if anything is unclear, that simpler project is a good reference point.
+This was done as part of an academic VLSI/digital design internship at **IIT Bhubaneswar**. The same flow was first validated on a simpler mod-10 counter design before being applied to a full RISC-V core, so if anything is unclear, that simpler project is a good reference point.
 
 This README is written so that someone with little or no prior exposure to the digital ASIC/VLSI flow can follow along and understand not just *what* commands were run, but *why*.
 
@@ -10,68 +10,81 @@ This README is written so that someone with little or no prior exposure to the d
 
 ## Table of Contents
 
-1. [Background: What is this project actually doing?](#background-what-is-this-project-actually-doing)
+1. [Background](#background)
 2. [Key Terms Explained](#key-terms-explained)
 3. [Tools Used](#tools-used)
 4. [Directory Structure](#directory-structure)
-5. [Flow Overview (Step by Step)](#flow-overview-step-by-step)
+5. [Flow Overview](#flow-overview)
 6. [Setup Instructions](#setup-instructions)
 7. [Running Synthesis](#running-synthesis)
 8. [Reading the Reports](#reading-the-reports)
 9. [Running Gate-Level Simulation (GLS)](#running-gate-level-simulation-gls)
 10. [Viewing Waveforms](#viewing-waveforms)
 11. [Results Summary](#results-summary)
-12. [Common Errors and Fixes](#common-errors-and-fixes)
-13. [Deliverables for Physical Design Handoff](#deliverables-for-physical-design-handoff)
-14. [Notes](#notes)
+12. [Known Limitations](#known-limitations)
+13. [Common Errors and Fixes](#common-errors-and-fixes)
+14. [Deliverables for Physical Design Handoff](#deliverables-for-physical-design-handoff)
+15. [Notes](#notes)
 
 ---
 
-## Background: What is this project actually doing?
+## Background
 
-When you design a digital circuit (like a processor), you usually start by describing its behavior in a hardware description language like **Verilog**. This Verilog code is called **RTL** (Register Transfer Level) — it describes *what* the circuit should do (e.g. "on every clock edge, update the program counter"), but it isn't yet a physical circuit.
+When you design a digital circuit (like a processor), you usually start by describing its behavior in a hardware description language like **Verilog**. This Verilog code is called **RTL** (Register Transfer Level) — it describes *what* the circuit should do (for example, "on every clock edge, update the program counter"), but it is not yet a physical circuit.
 
-To turn that RTL into something that can actually be manufactured as a chip, it has to go through a process called **logic synthesis**. A synthesis tool (here, Cadence Genus) reads the RTL and converts it into a netlist made of real, physical standard logic cells (AND gates, flip-flops, multiplexers, etc.) that exist in a specific manufacturing technology — in this project, a 45nm process.
+To turn that RTL into something that can actually be manufactured as a chip, it has to go through a process called **logic synthesis**. A synthesis tool (here, Cadence Genus) reads the RTL and converts it into a netlist made of real, physical standard logic cells — AND gates, flip-flops, multiplexers, and so on — that exist in a specific manufacturing technology. In this project, that technology is a 45nm process node.
 
-Once that gate-level netlist exists, it's important to check that it still behaves the way the original RTL did. This is done with **Gate-Level Simulation (GLS)** — simulating the synthesized netlist (instead of the original RTL) and confirming the outputs still match expectations.
+Once the gate-level netlist exists, it is important to verify that it still behaves the way the original RTL did. This is done with **Gate-Level Simulation (GLS)** — simulating the synthesized netlist (instead of the original RTL) and confirming that outputs still match expectations.
 
-So in short, this project takes:
+In short, this project takes:
 
 ```
-RTL (riscv.v)  →  Synthesis (Genus)  →  Gate-level netlist (riscv_net.v)  →  GLS (ncverilog)  →  Waveform check
+RTL (riscv.v)
+    │
+    ▼
+Synthesis (Cadence Genus)
+    │
+    ▼
+Gate-Level Netlist (riscv_net.v)
+    │
+    ▼
+Gate-Level Simulation (ncverilog)
+    │
+    ▼
+Waveform Verification (SimVision)
 ```
 
 ---
 
 ## Key Terms Explained
 
-If you're new to this flow, here's a quick glossary of terms used throughout this README and the scripts:
-
 | Term | Meaning |
 |---|---|
-| **RTL** | Register Transfer Level — the Verilog source code describing circuit behavior |
-| **Synthesis** | The process of converting RTL into a gate-level netlist using a standard cell library |
-| **Netlist** | A text file listing the actual logic gates and how they're wired together |
-| **Standard Cell Library (.lib)** | A file describing all the basic logic gates (AND, OR, flip-flops, etc.) available in a given manufacturing technology, including their timing, power, and area characteristics |
-| **45nm** | The manufacturing process node — refers to the approximate transistor feature size. Smaller nodes are newer/denser; 45nm is an older, simpler node commonly used for teaching |
-| **SDC (Synopsys Design Constraints)** | A file that tells the synthesis tool the timing requirements: clock speed, input/output delays, etc. Without constraints, the tool doesn't know how fast the circuit needs to run |
-| **Clock period** | The time for one clock cycle. A 20 ns period means the clock runs at 1 / 20ns = 50 MHz |
-| **Slack** | The difference between the required time and the actual time a signal takes to travel through logic. Positive slack = timing requirement met. Negative slack = timing violation (circuit may not work at the target speed) |
-| **GLS (Gate-Level Simulation)** | Simulating the post-synthesis netlist (instead of RTL) to verify the synthesized circuit still behaves correctly |
-| **Testbench** | A separate piece of Verilog code that doesn't represent real hardware — its job is to feed inputs (like clock and reset) into the design and observe the outputs during simulation |
-| **VCD (Value Change Dump)** | A file format that records how every signal's value changes over time during simulation, used for waveform viewing |
-| **Schematic Viewer** | A GUI tool inside Genus that lets you visually see the logic gates and connections, rather than just reading the netlist as text |
+| **RTL** | Register Transfer Level — Verilog/SystemVerilog code describing circuit behaviour |
+| **Synthesis** | Converting RTL into a gate-level netlist using a standard cell library |
+| **Netlist** | A text file listing actual logic gates and how they are connected |
+| **Standard Cell Library (.lib)** | Describes all basic logic gates available in a given manufacturing technology, including timing, power, and area data |
+| **45nm** | The manufacturing process node — refers to approximate transistor feature size. 45nm is commonly used in academic settings |
+| **SDC** | Synopsys Design Constraints — tells the synthesis tool the timing requirements (clock speed, I/O delays, etc.) |
+| **Clock Period** | Duration of one clock cycle. 20 ns period = 1 / 20 ns = 50 MHz |
+| **Slack** | Time margin in a timing path. Positive slack = timing met. Negative slack = timing violation |
+| **GLS** | Gate-Level Simulation — simulating the post-synthesis netlist to verify correctness |
+| **Testbench** | Verilog code that drives inputs into the design and checks outputs during simulation |
+| **VCD** | Value Change Dump — records signal transitions over time for waveform viewing |
+| **False Path** | A timing path that does not affect real circuit behaviour and should be excluded from timing analysis (e.g. asynchronous reset) |
 
 ---
 
 ## Tools Used
 
-- **Synthesis:** Cadence Genus 18.10 — converts RTL into a gate-level netlist
-- **Simulation:** ncverilog (part of Cadence Incisive) — runs gate-level simulation
-- **Waveform viewer:** SimVision — visualizes signal behavior over time from the VCD file
-- **Technology library:** 45nm GPDK standard cell library (`slow_vdd1v0_basicCells.lib`)
+| Tool | Version | Purpose |
+|---|---|---|
+| Cadence Genus | 18.10 | RTL synthesis — converts Verilog to gate-level netlist |
+| ncverilog | Cadence Incisive | Gate-level simulation |
+| SimVision | Cadence | Waveform viewing from VCD files |
+| Technology Library | 45nm GPDK | Standard cell library (`slow_vdd1v0_basicCells.lib`) |
 
-All of these tools were run on a remote lab server (`vlsiws24`), accessed via a Linux terminal. If you're following this on your own machine, you'll need access to a licensed Cadence toolchain — these are not free/open-source tools.
+All tools were run on a remote lab server at IIT Bhubaneswar (`vlsiws13`), running Red Hat Enterprise Linux 7.9, accessed via a Linux terminal. These are not free or open-source tools — a valid Cadence license is required.
 
 ---
 
@@ -79,45 +92,45 @@ All of these tools were run on a remote lab server (`vlsiws24`), accessed via a 
 
 ```
 .
-├── rtl/                     RTL source and testbench
-│   ├── riscv.v               the processor design itself
-│   └── riscv_tb.v            testbench that drives clk/rst and observes pc_out
-├── constraint/                SDC timing constraints
-│   └── constraint.sdc
-├── synthesis/                  Genus synthesis script and reports
-│   ├── syn.tcl                the script that drives the whole synthesis run
-│   ├── riscv_net.v            synthesized gate-level netlist (output)
-│   ├── constraint_out.sdc     back-annotated constraints (output)
-│   ├── area.rpt               cell count / area report (output)
-│   ├── timing.rpt             timing slack report (output)
-│   ├── power.rpt               power estimate report (output)
-│   └── gates.rpt               gate count breakdown (output)
-├── gls/                         gate-level simulation outputs
-│   └── riscv.vcd                waveform dump from GLS run
+├── rtl/
+│   ├── riscv.v                  Single-cycle RV32I processor (RTL source)
+│   └── riscv_tb.v               Testbench for simulation
+├── constraint/
+│   └── constraint.sdc           SDC timing constraints (50 MHz clock)
+├── synthesis/
+│   ├── syn.tcl                  Genus synthesis script
+│   ├── riscv_net.v              Synthesized gate-level netlist       [output]
+│   ├── constraint_out.sdc       Back-annotated constraints           [output]
+│   ├── timing.rpt               Setup/hold slack report              [output]
+│   ├── area.rpt                 Cell count and area report           [output]
+│   ├── power.rpt                Power estimate report                [output]
+│   └── gates.rpt                Gate-type breakdown report           [output]
+├── gls/
+│   └── riscv.vcd                Waveform dump from GLS run           [output]
 └── README.md
 ```
 
-Files marked "(output)" are generated automatically when you run the scripts — you don't need to create them by hand.
+Files marked `[output]` are generated automatically when you run the scripts — you do not need to create them by hand.
 
-> **Note:** the foundry standard cell library (`.lib`/`.v` model files) is **not included** in this repo, since it is typically restricted IP under the lab/foundry license agreement. You'll need to supply these yourself — see [Setup Instructions](#setup-instructions) below.
+> **Note:** The standard cell library files (`.lib` and `.v` model files) are **not included** in this repository. They contain proprietary foundry IP distributed under a lab license agreement. See [Setup Instructions](#setup-instructions) for how to supply them.
 
 ---
 
-## Flow Overview (Step by Step)
+## Flow Overview
 
-This is the full sequence of what happens, from start to finish:
+This is the full sequence from start to finish:
 
-1. **Write/obtain the RTL** — `riscv.v`, a single-cycle RISC-V core with ports `clk`, `rst`, and `pc_out`.
-2. **Define timing constraints** — `constraint.sdc` tells Genus the clock runs at 20 ns (50 MHz), and specifies how inputs/outputs interact with that clock.
-3. **Write the synthesis script** — `syn.tcl` tells Genus where to find the RTL, the library, and the constraints, and what commands to run.
-4. **Run synthesis** in three stages:
-   - `syn_generic` — converts RTL into generic, technology-independent logic gates
-   - `syn_map` — maps those generic gates onto real 45nm library cells
-   - `syn_opt` — optimizes the mapped netlist for timing/area
-5. **Export reports** — area, timing, power, and gate count are written out for analysis.
-6. **Set up GLS** — copy the synthesized netlist and the library's simulation models into the `gls/` folder, and write a testbench.
-7. **Run gate-level simulation** with `ncverilog`, simulating the actual synthesized gates (not the original RTL) to confirm correct behavior.
-8. **View waveforms** in SimVision to visually confirm the processor behaves as expected (e.g. `pc_out` incrementing every clock cycle).
+1. **Write the RTL** — `riscv.v` implements a single-cycle RV32I core supporting all six RISC-V instruction types (R, I, S, B, U, J).
+2. **Define timing constraints** — `constraint.sdc` specifies a 20 ns clock (50 MHz), input/output delays, clock quality parameters, and a false path for the asynchronous reset.
+3. **Write the synthesis script** — `syn.tcl` tells Genus where to find the RTL, library, and constraints, and what commands to run.
+4. **Run synthesis** in three passes:
+   - `syn_generic` — converts RTL to technology-independent logic
+   - `syn_map` — maps generic logic onto real 45nm library cells
+   - `syn_opt` — optimizes the mapped netlist for timing and area
+5. **Export reports** — timing, area, power, and gate count written to `synthesis/`.
+6. **Set up GLS** — copy the synthesized netlist and cell simulation models into `gls/`.
+7. **Run gate-level simulation** with `ncverilog` to confirm correct behaviour.
+8. **View waveforms** in SimVision to visually verify the processor (e.g. `pc_out` incrementing by 4 each cycle after reset).
 
 ---
 
@@ -126,190 +139,189 @@ This is the full sequence of what happens, from start to finish:
 ### 1. Clone this repository
 
 ```bash
-git clone https://github.com/<your-username>/<repo-name>.git
-cd <repo-name>
+git clone https://github.com/SansidMishra/RISCV-Synthesis.git
+cd RISCV-Synthesis
 ```
 
-### 2. Supply the foundry library files (not included in this repo)
+### 2. Supply the foundry library files
 
-These files contain proprietary technology information and must be obtained separately from your lab/foundry license — they are **not** distributed in this repository.
+These are not included in this repository. Obtain them from your lab or foundry license:
 
 ```bash
 mkdir -p lib
 cp /path/to/slow_vdd1v0_basicCells.lib lib/
-cp /path/to/slow_vdd1v0_basicCells.v gls/
+cp /path/to/slow_vdd1v0_basicCells.v   gls/
 ```
 
-If you don't already know where these files live on your system, you can search for them:
+If you do not know where they are installed on your system:
 
 ```bash
-find /cad/FOUNDRY/digital/45nm -name "*.lib" |& head -20
+find /cad/FOUNDRY/digital/45nm -name "*.lib" 2>/dev/null | head -20
 ```
 
-You can confirm a `.lib` file actually contains usable logic cells (and isn't just filler/decap cells) with:
+Confirm the library contains real logic cells (not just filler/decap cells):
 
 ```bash
-grep "cell (" library.lib | head -10
+grep "cell (" lib/slow_vdd1v0_basicCells.lib | head -10
 ```
 
----
+You should see cell names like `INV_X1`, `NAND2_X1`, `DFF_X1`, etc. If you only see filler or decap cells, you have the wrong library file.
 
-## Running Synthesis
-
-Make sure the Cadence environment is loaded into your shell first (this sets up tool paths and licenses):
+### 3. Load the Cadence tool environment
 
 ```bash
 source /cad/cshrc
 ```
 
-Then run Genus with the provided script:
+This sets up the tool paths and license variables. You must run this in every new terminal session before using any Cadence tool.
+
+---
+
+## Running Synthesis
 
 ```bash
 cd synthesis
 genus -f syn.tcl |& tee synthesis.log
 ```
 
-`tee synthesis.log` saves a copy of everything printed to the terminal into a log file, so you can review it later even if the terminal window closes.
+`tee synthesis.log` saves a copy of all terminal output to a log file — useful for debugging if the window closes unexpectedly.
 
-As it runs, watch for these milestone messages confirming each synthesis stage completed successfully:
+### Milestone messages to watch for
+
+As synthesis runs, these lines confirm each stage completed successfully:
 
 ```
 Info : Done synthesizing. [SYNTH-2]
-       Done synthesizing 'riscv' to generic gates.        (after syn_generic)
+       Done synthesizing 'riscv' to generic gates.     ← syn_generic complete
 
 Info : Done incrementally optimizing. [SYNTH-8]
-       Done incrementally optimizing 'riscv'.              (after syn_opt)
+       Done incrementally optimizing 'riscv'.           ← syn_opt complete
 ```
 
-If you don't see these messages, something went wrong earlier in the run — check the [Common Errors and Fixes](#common-errors-and-fixes) table below, or scroll up in the log for the first `Error` message.
+If you do not see these, something went wrong. Scroll up in the log to find the first `Error` line, or consult the [Common Errors and Fixes](#common-errors-and-fixes) table.
 
 ---
 
 ## Reading the Reports
 
-After synthesis finishes, four report files are generated automatically in `synthesis/`. You can view any of them with `cat`:
+After synthesis, four report files are written to `synthesis/`. View any of them with:
 
 ```bash
-cat area.rpt
 cat timing.rpt
+cat area.rpt
 cat power.rpt
 cat gates.rpt
 ```
 
-### Area Report (`area.rpt`)
-
-Tells you how big the synthesized circuit is, in terms of standard cell area (not yet physical layout area):
-
-| Field | Meaning |
-|---|---|
-| Cell Count | Total number of standard cells (gates/flip-flops) used |
-| Cell Area | Area occupied by the logic cells themselves |
-| Net Area | Area occupied by interconnect wiring (usually 0 at this stage, since physical wiring hasn't happened yet) |
-| Total Area | Cell Area + Net Area |
-
 ### Timing Report (`timing.rpt`)
 
-Tells you whether the circuit can run at the clock speed you specified in `constraint.sdc`.
+The most important report. Tells you whether the circuit meets your target clock speed.
 
-- **Positive slack** → timing is **met** (the circuit is fast enough)
-- **Negative slack** → timing **violation** (some path takes longer than the clock period allows; the design may not work correctly at this speed)
+```
+slack (MET)      :  0.397   ← Timing is satisfied — circuit works at 50 MHz
+slack (VIOLATED) : -1.230   ← Timing violation — circuit is too slow
+```
 
-If `timing.rpt` is empty (0 bytes), it usually means some inputs/outputs weren't properly constrained. Diagnose this inside Genus with:
+If `timing.rpt` is empty (0 bytes), it usually means some ports were not properly constrained. Diagnose inside Genus with:
 
 ```tcl
 report_timing -lint
 ```
 
+### Area Report (`area.rpt`)
+
+| Field | Meaning |
+|---|---|
+| Cell Count | Total number of standard cells used |
+| Cell Area | Area occupied by logic cells |
+| Net Area | Interconnect area (typically 0 before place-and-route) |
+| Total Area | Cell Area + Net Area |
+
 ### Power Report (`power.rpt`)
 
-Breaks down estimated power consumption into:
-- **Leakage Power** — power consumed even when the circuit is idle
-- **Dynamic Power** — power consumed due to signal switching activity
-- **Total Power** — sum of the two
+| Field | Meaning |
+|---|---|
+| Leakage Power | Power consumed when circuit is idle |
+| Dynamic Power | Power consumed due to signal switching |
+| Total Power | Sum of leakage and dynamic |
 
-A processor like this RISC-V core will show noticeably higher dynamic power than a simple design (like a counter), because it has more logic and more switching activity per clock cycle.
+A full RISC-V processor will show significantly higher dynamic power than a simple counter design due to the larger number of switching gates per clock cycle.
 
 ### Gates Report (`gates.rpt`)
 
-Lists the breakdown of which specific standard cells (gate types) were used and how many of each.
+Lists which standard cell types were used and how many of each — useful for understanding how the synthesizer implemented your design.
 
 ---
 
 ## Running Gate-Level Simulation (GLS)
 
-GLS confirms that the synthesized netlist — the actual gates that will be manufactured — still behaves correctly, not just the original RTL.
+GLS verifies that the synthesized netlist — the actual gates — behaves identically to the original RTL.
 
-### 1. Copy the necessary files into `gls/`
+### 1. Copy required files into `gls/`
 
 ```bash
+cd gls
 cp ../synthesis/riscv_net.v .
 cp /cad/FOUNDRY/digital/45nm/svt/verilog/slow_vdd1v0_basicCells.v .
 ```
 
-### 2. The testbench (`riscv_tb.v`)
-
-The testbench is *not* part of the real hardware — it's a Verilog wrapper used only for simulation, whose job is to:
-- Generate a clock signal (toggling every 10 ns, giving a 20 ns period to match the SDC)
-- Apply and release reset (`rst`)
-- Instantiate the actual design (`riscv`) and connect its ports
-- Dump signal changes to a `.vcd` file for waveform viewing
-- Print live status updates to the terminal via `$monitor`
-
-If your RTL reads a program from a hex file using `$readmemh`, you'll need to provide a placeholder instruction memory file before simulating (a file full of NOP instructions, opcode `0x00000013`):
-
-```bash
-python3 -c "print(chr(10).join(['00000013']*256))" > program.hex
-```
-
-### 3. Run the simulation
+### 2. Run the simulation
 
 ```bash
 source /cad/cshrc
-ncverilog slow_vdd1v0_basicCells.v riscv_net.v riscv_tb.v +access+r
+ncverilog slow_vdd1v0_basicCells.v riscv_net.v ../rtl/riscv_tb.v +access+r
 ```
 
-**Important:** the file order matters here — list the cell model file first, then the synthesized netlist, then the testbench. Reversing this order is a common cause of "module not found" type errors.
+> **Important:** File order matters. Always list the cell model file first, then the netlist, then the testbench. Reversing this order causes "module not found" errors because the simulator tries to instantiate cells before they are defined.
 
-`+access+r` grants read access to internal signals, which is required for waveform viewing afterward.
+`+access+r` enables read access to internal signals, which is required for waveform dumping.
 
-A successful run ends with a line like:
+### 3. Expected output
+
+A successful simulation ends with:
 
 ```
 Simulation complete via $finish(1) at time 540 NS
 ```
 
+You will also see per-cycle `$monitor` output and a final PASS/FAIL summary from the testbench.
+
 ---
 
 ## Viewing Waveforms
 
-Once `riscv.vcd` has been generated, open it in SimVision:
+Once `riscv.vcd` is generated:
 
 ```bash
 simvision riscv.vcd &
 ```
 
-Steps inside the SimVision GUI:
+### Steps inside SimVision
 
-1. If a database is already open and locked, reopen it from the console with:
+1. If a database is already open and locked, reopen it from the console:
    ```
    database open -overwrite riscv.vcd
    ```
-2. In the **Design Browser** panel (left side), click the small triangle/arrow next to the top module (e.g. `riscv > riscv_tb`) to expand the hierarchy.
-3. Click on `riscv_tb` — its signals (`clk`, `rst`, `pc_out`) will appear in the panel below.
-4. Select all signals (`Ctrl+A`), then click **"Click and add to waveform area"**.
-5. Press **F** (or go to `View > Zoom > Full X`) to fit the entire simulation timeline on screen.
+2. In the **Design Browser** panel (left side), click the triangle next to the top module to expand the hierarchy.
+3. Click on `riscv_tb` — its signals (`clk`, `rst_n`, `pc_out`, etc.) appear in the panel below.
+4. Select all signals with `Ctrl+A`, then click **"Send to Waveform Viewer"**.
+5. Press **F** (or go to `View → Zoom → Fit`) to display the full simulation timeline.
 
 ### What to expect
 
-For a correctly working single-cycle RISC-V core, you should see `pc_out` incrementing by 4 every clock cycle once `rst` goes low — for example:
+For a correctly working single-cycle RISC-V core running NOPs, `pc_out` should increment by 4 every clock cycle once `rst_n` goes high:
 
 ```
-00000000 → 00000004 → 00000008 → 0000000C → ...
+Time 0    → pc_out = 0x00000000  (reset active)
+Time 40ns → pc_out = 0x00000004  (first instruction fetched)
+Time 60ns → pc_out = 0x00000008
+Time 80ns → pc_out = 0x0000000C
+...
 ```
 
-This makes sense because RISC-V instructions are 4 bytes wide, and a single-cycle processor (with no branches taken) simply advances the program counter by one instruction each cycle.
+This is correct because RISC-V instructions are 4 bytes wide and a single-cycle processor advances the program counter by one instruction per clock cycle.
 
-If no expand arrow appears next to the top module in the Design Browser, the VCD likely only dumped a "flat" scope rather than the full hierarchy. Double-check the `$dumpvars` line in the testbench, delete the old `.vcd` file, and re-run the simulation.
+> If no expand arrow appears next to the top module in the Design Browser, the VCD only captured a flat scope. Check the `$dumpvars` line in the testbench, delete the old `.vcd` file, and re-run the simulation.
 
 ---
 
@@ -317,44 +329,63 @@ If no expand arrow appears next to the top module in the Design Browser, the VCD
 
 | Metric | Value |
 |---|---|
-| Clock period | 20 ns (50 MHz) |
-| Target slack | 397 ps (clk cost group) |
-| Total cell area | 304 (post-optimization) |
-| GLS result | `pc_out` increments by 4 per cycle after reset, as expected |
+| Target clock frequency | 50 MHz (20 ns period) |
+| Worst negative slack | +0.397 ns (MET) |
+| Total cell area | 304 units (post-`syn_opt`) |
+| GLS result | `pc_out` increments correctly by 4 per cycle after reset |
+| Instructions supported | All RV32I base integer instructions (R/I/S/B/U/J types) |
 
-*(Replace/expand this table with your own final numbers pulled directly from `area.rpt`, `timing.rpt`, and `power.rpt` once your run is finalized.)*
+---
+
+## Known Limitations
+
+These are design decisions made intentionally for simplicity at this stage of learning. They would need to be addressed before any real tapeout.
+
+- **Branch condition logic is simplified** — the current RTL checks only `alu_zero` for all branch types. Full correctness requires separate condition checks for BNE, BLT, BGE, BLTU, and BGEU.
+- **LUI implementation** — the ALU operand mux for LUI uses `imm_u` correctly only when `alu_src` is also set in the control unit. Verify this is set correctly in `control_unit.v`.
+- **No pipeline** — this is a single-cycle design. Every instruction takes exactly one clock cycle regardless of complexity.
+- **No hazard detection** — since it is single-cycle, there are no data or control hazards to handle.
+- **No exception handling** — illegal instructions and misaligned memory accesses are not handled.
+- **Fixed memory size** — instruction memory is 256 words (1 KiB) and data memory is 1 KiB. These are sufficient for simulation but not for real programs.
+- **Hold timing not fully constrained** — the SDC currently specifies `-min` delays. Verify that `constraint.sdc` includes `set_input_delay -min` and `set_output_delay -min` for complete hold analysis.
 
 ---
 
 ## Common Errors and Fixes
 
-These are real issues encountered while building this flow, along with what caused them and how they were resolved:
-
-| Error Message | Cause | Fix |
+| Error | Cause | Fix |
 |---|---|---|
-| `Multiple designs are available. Specify the design you want to use.` | `read_sdc` / `report_*` commands run without an explicit "current" design selected | Add `set_db design:riscv .current 1` before `read_sdc`, or pass the design name directly, e.g. `report_area riscv` |
-| `Cannot perform synthesis because libraries do not have usable inverters. [LBR-171]` | The `.lib` file loaded has no real logic cells (e.g. it's a timing-only or filler-only library) | Use a library confirmed to contain real cells like INV / NAND / NOR / DFF — check with `grep "cell (" library.lib` |
-| `An option named '-file' could not be found.` (on `write_hdl`) | Genus 18.10 doesn't support the `-file` flag used in some older tutorials | Use shell redirection instead: `write_hdl riscv > riscv_net.v` |
-| `cp: cannot create regular file: No such file or directory` | The target directory wasn't actually created beforehand | Run `ls` to verify the folder exists before copying; recreate with `mkdir -p` if missing |
-| Abnormal exit / Segmentation fault (after `gui_show`) | The Genus GUI crashed due to a display/X11 issue (common over remote/SSH sessions without proper X forwarding) | Avoid `gui_show`; just run `genus -f syn.tcl` — the GUI isn't needed unless you specifically want to view the schematic |
-| `Could not interpret SDC command. [SDC-202]` | A bus-style port reference like `out[0]` was misinterpreted by Tcl (square brackets have special meaning in Tcl) | Wrap the reference in curly braces, e.g. `{out[0]}` — or better, just use `all_inputs` / `all_outputs` to avoid the issue entirely |
+| `Multiple designs are available. Specify the design you want to use.` | `read_sdc` or `report_*` run without a current design selected | Add `set_db design:riscv .current 1` before `read_sdc`, or use `current_design riscv` |
+| `Cannot perform synthesis — libraries have no usable inverters. [LBR-171]` | The `.lib` file has no real logic cells (filler-only or decap-only library) | Confirm with `grep "cell (" library.lib` — you need cells like INV, NAND, DFF |
+| `An option named '-file' could not be found.` | Genus 18.10 does not support `write_hdl -file` | Use shell redirection: `write_hdl > riscv_net.v` |
+| `cp: cannot create regular file: No such file or directory` | Target directory does not exist | Run `mkdir -p <directory>` before copying |
+| Abnormal exit / segfault after `gui_show` | Genus GUI crashed due to X11/display issue (common over SSH) | Skip the GUI entirely — run `genus -f syn.tcl` from the terminal |
+| `Could not interpret SDC command. [SDC-202]` | Bus port references like `out[0]` are misinterpreted by Tcl (square brackets are Tcl syntax) | Wrap in curly braces: `{out[0]}` — or use `all_inputs` / `all_outputs` |
+| `timing.rpt` is empty | Ports not properly constrained — Genus found no timing paths to report | Run `report_timing -lint` inside Genus to identify unconstrained paths |
+| `module not found` in ncverilog | Cell model file listed after the netlist in the compile command | Always list `slow_vdd1v0_basicCells.v` first in the ncverilog command |
+| Negative slack after synthesis | Clock period too tight for the logic depth in the design | Increase clock period in `constraint.sdc` (e.g. change 20 ns to 25 ns) |
 
 ---
 
 ## Deliverables for Physical Design Handoff
 
-Once synthesis and GLS are both verified, these are the files that would be handed off to the next stage of the flow (physical design / place-and-route):
+Once synthesis and GLS are both verified, these files are handed off to the next stage (place-and-route / physical design):
 
-- `synthesis/riscv_net.v` — the gate-level netlist
-- `synthesis/constraint_out.sdc` — back-annotated timing constraints
-- `synthesis/area.rpt`, `timing.rpt`, `power.rpt` — for lab report documentation and as a reference baseline for physical design
+| File | Purpose |
+|---|---|
+| `synthesis/riscv_net.v` | Gate-level netlist — the synthesized design |
+| `synthesis/constraint_out.sdc` | Back-annotated timing constraints for P&R tool |
+| `synthesis/timing.rpt` | Timing closure baseline for the P&R team |
+| `synthesis/area.rpt` | Area estimate for floorplanning |
+| `synthesis/power.rpt` | Power estimate for PDN (power delivery network) planning |
 
 ---
 
 ## Notes
 
-- `set_db design:riscv .current 1` is required before `read_sdc` to avoid the "Multiple designs are available" error in Genus.
-- Genus 18.10 does not support `write_hdl -file`; use shell redirection (`write_hdl riscv > riscv_net.v`) instead.
-- Bus-style port references in SDC (e.g. `out[0]`) should be wrapped in `{}`, or avoided in favor of `all_inputs`/`all_outputs`.
-- This flow was first validated end-to-end on a simpler mod-10 counter design before being applied to this RISC-V core — if something here is confusing, working through that simpler example first may help.
-- A 20 ns (50 MHz) clock period was chosen as a safe, conservative starting point for a single-cycle 45nm RISC-V design. If `report_timing -lint` reports failing paths, try increasing the clock period (i.e. slowing down the clock) to give the logic more time per cycle.
+- `set_db design:riscv .current 1` or `current_design riscv` must be called before `read_sdc` to avoid the "Multiple designs" error in Genus 18.10.
+- Genus 18.10 does not support the `write_hdl -file` flag seen in some tutorials. Use shell redirection (`write_hdl > riscv_net.v`) instead.
+- Bus-style port references in SDC (e.g. `out[0]`) must be wrapped in `{}` or replaced with `all_inputs` / `all_outputs`.
+- Remove `\`timescale` directives from `riscv.v` before synthesis — they are simulation-only constructs and do not belong in synthesis RTL.
+- The 20 ns (50 MHz) clock was chosen as a conservative starting point for a single-cycle 45nm design. If timing is violated, increase the period in `constraint.sdc` before debugging the logic path.
+- This flow was validated end-to-end on a simpler mod-10 counter before being applied to the RISC-V core. Working through that simpler example first is recommended if you are new to this flow.
