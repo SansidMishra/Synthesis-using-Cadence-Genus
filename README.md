@@ -21,10 +21,11 @@ This README is written so that someone with little or no prior exposure to the d
 9. [Running Gate-Level Simulation (GLS)](#running-gate-level-simulation-gls)
 10. [Viewing Waveforms](#viewing-waveforms)
 11. [Results Summary](#results-summary)
-12. [Known Limitations](#known-limitations)
-13. [Common Errors and Fixes](#common-errors-and-fixes)
-14. [Deliverables for Physical Design Handoff](#deliverables-for-physical-design-handoff)
-15. [Notes](#notes)
+12. [Report Screenshots](#report-screenshots)
+13. [Known Limitations](#known-limitations)
+14. [Common Errors and Fixes](#common-errors-and-fixes)
+15. [Deliverables for Physical Design Handoff](#deliverables-for-physical-design-handoff)
+16. [Notes](#notes)
 
 ---
 
@@ -84,7 +85,7 @@ Waveform Verification (SimVision)
 | SimVision | Cadence | Waveform viewing from VCD files |
 | Technology Library | 45nm GPDK | Standard cell library (`slow_vdd1v0_basicCells.lib`) |
 
-All tools were run on a remote lab server at IIT Bhubaneswar (`vlsiws13`), running Red Hat Enterprise Linux 7.9, accessed via a Linux terminal. These are not free or open-source tools — a valid Cadence license is required.
+All tools were run on a remote lab server at IIT Bhubaneswar (`vlsiws24`), running Red Hat Enterprise Linux 7.9, accessed via a Linux terminal. These are not free or open-source tools — a valid Cadence license is required.
 
 ---
 
@@ -107,6 +108,13 @@ All tools were run on a remote lab server at IIT Bhubaneswar (`vlsiws13`), runni
 │   └── gates.rpt                Gate-type breakdown report           [output]
 ├── gls/
 │   └── riscv.vcd                Waveform dump from GLS run           [output]
+├── docs/
+│   ├── timing_report.png        Timing report screenshot
+│   ├── area_report.png          Area report screenshot
+│   ├── power_report.png         Power report screenshot
+│   └── gates_report.png         Gates report screenshot
+├── lib/
+│   └── README.md                Library placeholder and instructions
 └── README.md
 ```
 
@@ -218,8 +226,8 @@ cat gates.rpt
 The most important report. Tells you whether the circuit meets your target clock speed.
 
 ```
-slack (MET)      :  0.397   ← Timing is satisfied — circuit works at 50 MHz
-slack (VIOLATED) : -1.230   ← Timing violation — circuit is too slow
+slack (MET)      :  16.057  ← Timing is satisfied — circuit works at 50 MHz
+slack (VIOLATED) :  -1.230  ← Timing violation — circuit is too slow
 ```
 
 If `timing.rpt` is empty (0 bytes), it usually means some ports were not properly constrained. Diagnose inside Genus with:
@@ -327,8 +335,6 @@ This is correct because RISC-V instructions are 4 bytes wide and a single-cycle 
 
 ## Results Summary
 
-## Results Summary
-
 | Metric | Value |
 |---|---|
 | Clock Period | 20 ns (50 MHz) |
@@ -342,6 +348,23 @@ This is correct because RISC-V instructions are 4 bytes wide and a single-cycle 
 | Dynamic Power | 9368.974 nW |
 | Total Power | 9374.414 nW (~9.37 µW) |
 | GLS Result | Pending |
+
+---
+
+## Report Screenshots
+
+### Timing Report
+![Timing Report](docs/timing_report.png)
+
+### Area Report
+![Area Report](docs/area_report.png)
+
+### Power Report
+![Power Report](docs/power_report.png)
+
+### Gates Report
+![Gates Report](docs/gates_report.png)
+
 ---
 
 ## Known Limitations
@@ -354,7 +377,7 @@ These are design decisions made intentionally for simplicity at this stage of le
 - **No hazard detection** — since it is single-cycle, there are no data or control hazards to handle.
 - **No exception handling** — illegal instructions and misaligned memory accesses are not handled.
 - **Fixed memory size** — instruction memory is 256 words (1 KiB) and data memory is 1 KiB. These are sufficient for simulation but not for real programs.
-- **Hold timing not fully constrained** — the SDC currently specifies `-min` delays. Verify that `constraint.sdc` includes `set_input_delay -min` and `set_output_delay -min` for complete hold analysis.
+- **Hold timing not fully constrained** — verify that `constraint.sdc` includes `set_input_delay -min` and `set_output_delay -min` for complete hold analysis.
 
 ---
 
@@ -393,6 +416,6 @@ Once synthesis and GLS are both verified, these files are handed off to the next
 - `set_db design:riscv .current 1` or `current_design riscv` must be called before `read_sdc` to avoid the "Multiple designs" error in Genus 18.10.
 - Genus 18.10 does not support the `write_hdl -file` flag seen in some tutorials. Use shell redirection (`write_hdl > riscv_net.v`) instead.
 - Bus-style port references in SDC (e.g. `out[0]`) must be wrapped in `{}` or replaced with `all_inputs` / `all_outputs`.
-- Remove `\`timescale` directives from `riscv.v` before synthesis — they are simulation-only constructs and do not belong in synthesis RTL.
+- Remove `` `timescale `` directives from `riscv.v` before synthesis — they are simulation-only constructs and do not belong in synthesis RTL.
 - The 20 ns (50 MHz) clock was chosen as a conservative starting point for a single-cycle 45nm design. If timing is violated, increase the period in `constraint.sdc` before debugging the logic path.
 - This flow was validated end-to-end on a simpler mod-10 counter before being applied to the RISC-V core. Working through that simpler example first is recommended if you are new to this flow.
