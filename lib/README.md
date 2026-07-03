@@ -1,7 +1,7 @@
 # Library Files
 
 The standard cell library files are not included in this repository
-as they are proprietary foundry IP under the IIT Bhubaneswar lab license.
+as they are proprietary foundry IP under the lab license.
 
 ## Files required here:
 - `slow_vdd1v0_basicCells.lib` — timing library for Genus synthesis
